@@ -34,6 +34,16 @@ class JudgeCNN(nn.Module):
         return self.head(self.features(x))
 
 
+def load_judge(path, device: str = "cuda") -> JudgeCNN:
+    """Loads the trained judge in eval mode with all gradients disabled (frozen)."""
+    model = JudgeCNN()
+    model.load_state_dict(torch.load(path, map_location=device))
+    model.to(device).eval()
+    for p in model.parameters():
+        p.requires_grad_(False)
+    return model
+
+
 if __name__ == "__main__":
     model = JudgeCNN()
     x = torch.rand(4, 1, 28, 28)
