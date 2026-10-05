@@ -1,9 +1,6 @@
-from pathlib import Path
-
 import torch
 from torchvision import datasets
-
-DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
+from lab.paths import DATA_ROOT
 
 
 def load_fmnist(device: str = "cpu") -> dict[str, torch.Tensor]:
