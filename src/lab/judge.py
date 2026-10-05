@@ -2,6 +2,8 @@
 import torch
 from torch import nn
 
+from lab.data import preprocess
+
 FEATURE_DIM = 128
 NUM_CLASSES = 10
 
@@ -42,6 +44,17 @@ def load_judge(path, device: str = "cuda") -> JudgeCNN:
     for p in model.parameters():
         p.requires_grad_(False)
     return model
+
+
+@torch.no_grad()
+def extract_features(judge: JudgeCNN, x_uint8: torch.Tensor, batch_size: int = 1000) -> torch.Tensor:
+    """(N, 28, 28) uint8 -> (N, FEATURE_DIM) float32 on CPU. The judge must be frozen."""
+    assert not judge.training, "judge must be in eval mode"
+    out = []
+    for i in range(0, len(x_uint8), batch_size):
+        xb = x_uint8[i:i + batch_size]
+        out.append(judge.features(preprocess(xb)).cpu())
+    return torch.cat(out)
 
 
 if __name__ == "__main__":
