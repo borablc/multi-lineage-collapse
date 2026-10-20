@@ -2,7 +2,12 @@
 
 Part 1: k-NN family (Precision, Recall, Density, Coverage).
 References: Kynkaanniemi et al. 2019 (P/R), Naeem et al. 2020 (D/C).
+
+Part 2: FID.
+Reference: Heusel et al. 2017.
 """
+import math
+
 import torch
 
 from lab.paths import CHECKPOINT_DIR
@@ -82,28 +87,100 @@ def prdc(real_feat: torch.Tensor, fake_feat: torch.Tensor, k: int = DEFAULT_K) -
     return {"coverage": coverage, "density": density, "precision": precision, "recall": recall}
 
 
+def gaussian_stats(feat: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """(N, D) -> (mean (D,), cov (D, D)), both float64."""
+    feat = feat.double()
+    D = feat.size(1)
+    mu = feat.mean(dim=0)
+    cov = torch.cov(feat.T).reshape(D, D)
+    return mu, cov
+
+
+def _sqrt_psd(mat: torch.Tensor) -> torch.Tensor:
+    """Square root of a symmetric positive semi-definite matrix. (D, D) -> (D, D)."""
+    vals, vecs = torch.linalg.eigh(mat)
+    vals = vals.clamp(min=0)
+    return vecs @ torch.diag(vals.sqrt()) @ vecs.T
+
+
+def fid_from_stats(real_mu: torch.Tensor, real_cov: torch.Tensor,
+                   fake_mu: torch.Tensor, fake_cov: torch.Tensor) -> float:
+    """Frechet distance between two Gaussians given their statistics."""
+
+    # 1. Calculating the mu difference term (||mu_r - mu_f||^2)
+    mu_diff_term = torch.sum((real_mu - fake_mu) ** 2)
+
+    # 2. Calculating the trace term ( Tr(cov_r + cov_f - 2 * (cov_r^(1/2) @ cov_f @ cov_r^(1/2))^(1/2)) )
+    # 2.1. Calculating the cov_r^(1/2) term
+    real_cov_sqrt = _sqrt_psd(real_cov)
+    # 2.2. Calculating the cov_r^(1/2) @ cov_f @ cov_r^(1/2) term
+    sandwich = real_cov_sqrt @ fake_cov @ real_cov_sqrt
+    # 2.3. Calculating the (cov_r^(1/2) @ cov_f @ cov_r^(1/2))^(1/2)) term
+    sandwich_sqrt = _sqrt_psd(sandwich)
+    # 2.4. Calculating the full trace term
+    trace_term = torch.trace(real_cov + fake_cov - 2 * sandwich_sqrt)
+
+    #3. Calculate the FID
+    return (mu_diff_term + trace_term).item()
+
+
+def fid(real_feat: torch.Tensor, fake_feat: torch.Tensor) -> float:
+    """Frechet distance between Gaussians fitted to two feature sets.
+
+    FID = ||mu_r - mu_f||^2 + Tr(cov_r + cov_f - 2 * (cov_r @ cov_f)^(1/2))
+
+    The matrix square root is computed in the symmetric form
+        Tr((cov_r @ cov_f)^(1/2)) = Tr((S @ cov_f @ S)^(1/2)),  S = cov_r^(1/2)
+    because S @ cov_f @ S is symmetric PSD, so eigh can be used and no complex
+    values appear.
+
+    In 1-D this reduces to (mu_r - mu_f)^2 + (sigma_r - sigma_f)^2.
+    """
+    real_mu, real_cov = gaussian_stats(real_feat)
+    fake_mu, fake_cov = gaussian_stats(fake_feat)
+
+    return fid_from_stats(real_mu, real_cov, fake_mu, fake_cov)
+
+
+def check(condition: bool, description: str) -> None:
+    """Assert a sanity condition and report it by name."""
+    assert condition, f"FAILED: {description}"
+    print(f"[PASSED] {description}")
+
+
 def main():
     ref = torch.load(CHECKPOINT_DIR / "reference_fmnist.pt")
-    feat_a, feat_b, feat_train = ref["feat_a"], ref["feat_b"], ref["feat_train"]
+    feat_a, feat_b = ref["feat_a"], ref["feat_b"]
 
-    a_vs_a = prdc(feat_a, feat_a, k=DEFAULT_K)
-    a_vs_b = prdc(feat_a, feat_b, k=DEFAULT_K)
-    b_vs_a = prdc(feat_b, feat_a, k=DEFAULT_K)
+    prdc_aa = prdc(feat_a, feat_a, k=DEFAULT_K)
+    prdc_ab = prdc(feat_a, feat_b, k=DEFAULT_K)
+    prdc_ba = prdc(feat_b, feat_a, k=DEFAULT_K)
 
-    print("A vs A:",a_vs_a)
-    print("A vs B:",a_vs_b)
-    print("B vs A:",b_vs_a)
+    # PRDC
+    print("PRDC values\n-------------")
+    print("A vs A's PRDC:",prdc_aa)
+    print("A vs B's PRDC:",prdc_ab)
+    print("B vs A's PRDC:",prdc_ba)
 
-    # Sanity Checks
-    assert all(v == 1.0 for v in a_vs_a.values()), a_vs_a
-    assert a_vs_b["precision"] == b_vs_a["recall"]
-    assert b_vs_a["precision"] == a_vs_b["recall"]
+    # PRDC Sanity Checks
+    print("\nPRDC sanity checks\n-------------")
+    check(all(v == 1.0 for v in prdc_aa.values()), "A vs A: all PRDC metrics are exactly 1")
+    check(prdc_ab["precision"] == prdc_ba["recall"], "precision(A, B) == recall(B, A)")
+    check(prdc_ba["precision"] == prdc_ab["recall"], "precision(B, A) == recall(A, B)")
 
-    print("\nSanity checks\n-------------")
-    print("In A vs A, all metrics must be 1:", a_vs_a["coverage"] == a_vs_a["density"] == a_vs_a["precision"] == a_vs_a["recall"] == 1)
-    print("A vs B's precision must be the same as B vs A's recall:", a_vs_b["precision"] == b_vs_a["recall"])
-    print("B vs A's precision must be the same as A vs B's recall:", b_vs_a["precision"] == a_vs_b["recall"])
+    # FID
+    fid_aa = fid(feat_a, feat_a)
+    fid_ab = fid(feat_a, feat_b)
+    fid_ba = fid(feat_b, feat_a)
+    print("\nFID values\n-------------")
+    print("A vs A's FID:", fid_aa)
+    print("A vs B's FID:", fid_ab)
+    print("B vs A's FID:", fid_ba)
 
+    # FID Sanity checks
+    print("\nFID sanity checks\n-------------")
+    check(abs(fid_aa) < 1e-6, "A vs A: FID is ~0")
+    check(math.isclose(fid_ab, fid_ba, rel_tol=1e-6), "FID(A, B) ~= FID(B, A)")
 
 if __name__ == "__main__":
     main()

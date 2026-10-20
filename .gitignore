@@ -16,5 +16,6 @@ data/
 .idea/
 
 runs/
+scratch/
 checkpoints/
 *.pt
