@@ -8,12 +8,8 @@ Reference: Heusel et al. 2017.
 
 Part 3: Class Entropy.
 """
-import math
 
 import torch
-
-from lab.judge import load_judge, NUM_CLASSES
-from lab.paths import CHECKPOINT_DIR
 
 DEFAULT_K = 5
 
@@ -145,12 +141,6 @@ def fid(real_feat: torch.Tensor, fake_feat: torch.Tensor) -> float:
     return fid_from_stats(real_mu, real_cov, fake_mu, fake_cov)
 
 
-def check(condition: bool, description: str) -> None:
-    """Assert a sanity condition and report it by name."""
-    assert condition, f"FAILED: {description}"
-    print(f"[PASSED] {description}")
-
-
 def class_entropy(labels: torch.Tensor, num_classes: int) -> float:
     """(N,) int64 predicted labels -> Shannon entropy of the label histogram (natural log).
 
@@ -161,53 +151,3 @@ def class_entropy(labels: torch.Tensor, num_classes: int) -> float:
     p = counts / counts.sum()
     H = -torch.sum(torch.special.xlogy(p, p)).item()
     return H
-
-
-def main():
-    ref = torch.load(CHECKPOINT_DIR / "reference_fmnist.pt")
-    feat_a, feat_b = ref["feat_a"], ref["feat_b"]
-
-    prdc_aa = prdc(feat_a, feat_a, k=DEFAULT_K)
-    prdc_ab = prdc(feat_a, feat_b, k=DEFAULT_K)
-    prdc_ba = prdc(feat_b, feat_a, k=DEFAULT_K)
-
-    # PRDC
-    print("PRDC values\n-------------")
-    print("A vs A's PRDC:", prdc_aa)
-    print("A vs B's PRDC:", prdc_ab)
-    print("B vs A's PRDC:", prdc_ba)
-
-    # PRDC Sanity Checks
-    print("\nPRDC sanity checks\n-------------")
-    check(all(v == 1.0 for v in prdc_aa.values()), "A vs A: all PRDC metrics are exactly 1")
-    check(prdc_ab["precision"] == prdc_ba["recall"], "precision(A, B) == recall(B, A)")
-    check(prdc_ba["precision"] == prdc_ab["recall"], "precision(B, A) == recall(A, B)")
-
-    # FID
-    fid_aa = fid(feat_a, feat_a)
-    fid_ab = fid(feat_a, feat_b)
-    fid_ba = fid(feat_b, feat_a)
-    print("\nFID values\n-------------")
-    print("A vs A's FID:", fid_aa)
-    print("A vs B's FID:", fid_ab)
-    print("B vs A's FID:", fid_ba)
-
-    # FID Sanity checks
-    print("\nFID sanity checks\n-------------")
-    check(abs(fid_aa) < 1e-6, "A vs A: FID is ~0")
-    check(math.isclose(fid_ab, fid_ba, rel_tol=1e-6), "FID(A, B) ~= FID(B, A)")
-
-    # Class Entropy
-    judge = load_judge(CHECKPOINT_DIR / "judge_fmnist.pt", device="cpu")
-    labels_a = judge.head(feat_a).argmax(dim=1)
-    labels_b = judge.head(feat_b).argmax(dim=1)
-
-    print("\nClass Entropy values\n-------------")
-    class_entropy_a = class_entropy(labels_a, NUM_CLASSES)
-    class_entropy_b = class_entropy(labels_b, NUM_CLASSES)
-    print("Class Entropy feat A:", class_entropy_a)
-    print("Class Entropy feat B:", class_entropy_b)
-
-
-if __name__ == "__main__":
-    main()
