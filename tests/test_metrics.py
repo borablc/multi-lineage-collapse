@@ -1,10 +1,13 @@
 """Unit tests for lab.metrics on hand-computed toy cases."""
+from math import log
+
 import pytest
 import torch
 
-from lab.metrics import _sqrt_psd, fid, prdc
+from lab.metrics import _sqrt_psd, fid, prdc, class_entropy
 
 F64 = torch.float64
+I64 = torch.int64
 
 # ---------------------------------------------------------------------------
 # k-NN family: the "houses on a street" toy (1-D, k = 2)
@@ -144,3 +147,15 @@ def test_fid_symmetry(fake):
 
 def test_fid_identity():
     assert fid(REAL_3D, REAL_3D) == pytest.approx(0, abs=1e-9)
+
+# ---------------------------------------------------------------------------
+# Class Entropy
+
+@pytest.mark.parametrize("labels, num_classes, expected", [
+    (torch.arange(10).repeat(300), 10, log(10)),
+    (torch.arange(2).repeat(1500), 10, log(2)),
+    (torch.tensor([0, 0, 0, 1], dtype=I64).repeat(750), 10, -(0.75 * log(0.75) + 0.25 * log(0.25))),
+    (torch.zeros(3000, dtype=I64), 10, 0.)
+], ids=["evenly_distributed", "half_one_half_zero", "three_quarters_zero_quarter_one", "collapsed"])
+def test_class_entropy(labels, num_classes, expected):
+    assert class_entropy(labels, num_classes) == pytest.approx(expected)

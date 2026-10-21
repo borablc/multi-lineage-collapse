@@ -5,11 +5,14 @@ References: Kynkaanniemi et al. 2019 (P/R), Naeem et al. 2020 (D/C).
 
 Part 2: FID.
 Reference: Heusel et al. 2017.
+
+Part 3: Class Entropy.
 """
 import math
 
 import torch
 
+from lab.judge import load_judge, NUM_CLASSES
 from lab.paths import CHECKPOINT_DIR
 
 DEFAULT_K = 5
@@ -24,7 +27,7 @@ def knn_radii(feat: torch.Tensor, k: int) -> torch.Tensor:
     """(N, D) -> (N,) distance from each sample to its k-th nearest neighbor
     within the same set, excluding itself."""
     d = pairwise_distances(feat, feat)
-    return torch.kthvalue(d, k+1, dim=1).values
+    return torch.kthvalue(d, k + 1, dim=1).values
 
 
 def _inside(radii: torch.Tensor, d: torch.Tensor) -> torch.Tensor:
@@ -120,7 +123,7 @@ def fid_from_stats(real_mu: torch.Tensor, real_cov: torch.Tensor,
     # 2.4. Calculating the full trace term
     trace_term = torch.trace(real_cov + fake_cov - 2 * sandwich_sqrt)
 
-    #3. Calculate the FID
+    # 3. Calculate the FID
     return (mu_diff_term + trace_term).item()
 
 
@@ -148,6 +151,18 @@ def check(condition: bool, description: str) -> None:
     print(f"[PASSED] {description}")
 
 
+def class_entropy(labels: torch.Tensor, num_classes: int) -> float:
+    """(N,) int64 predicted labels -> Shannon entropy of the label histogram (natural log).
+
+    Max is log(num_classes) (perfectly balanced), min is 0 (all one class).
+    Blind to within-class collapse: one sample per class still scores the max.
+    """
+    counts = torch.bincount(labels, minlength=num_classes)
+    p = counts / counts.sum()
+    H = -torch.sum(torch.special.xlogy(p, p)).item()
+    return H
+
+
 def main():
     ref = torch.load(CHECKPOINT_DIR / "reference_fmnist.pt")
     feat_a, feat_b = ref["feat_a"], ref["feat_b"]
@@ -158,9 +173,9 @@ def main():
 
     # PRDC
     print("PRDC values\n-------------")
-    print("A vs A's PRDC:",prdc_aa)
-    print("A vs B's PRDC:",prdc_ab)
-    print("B vs A's PRDC:",prdc_ba)
+    print("A vs A's PRDC:", prdc_aa)
+    print("A vs B's PRDC:", prdc_ab)
+    print("B vs A's PRDC:", prdc_ba)
 
     # PRDC Sanity Checks
     print("\nPRDC sanity checks\n-------------")
@@ -181,6 +196,18 @@ def main():
     print("\nFID sanity checks\n-------------")
     check(abs(fid_aa) < 1e-6, "A vs A: FID is ~0")
     check(math.isclose(fid_ab, fid_ba, rel_tol=1e-6), "FID(A, B) ~= FID(B, A)")
+
+    # Class Entropy
+    judge = load_judge(CHECKPOINT_DIR / "judge_fmnist.pt", device="cpu")
+    labels_a = judge.head(feat_a).argmax(dim=1)
+    labels_b = judge.head(feat_b).argmax(dim=1)
+
+    print("\nClass Entropy values\n-------------")
+    class_entropy_a = class_entropy(labels_a, NUM_CLASSES)
+    class_entropy_b = class_entropy(labels_b, NUM_CLASSES)
+    print("Class Entropy feat A:", class_entropy_a)
+    print("Class Entropy feat B:", class_entropy_b)
+
 
 if __name__ == "__main__":
     main()
