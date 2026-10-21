@@ -3,7 +3,7 @@
 Scenarios (real reference is always set A, 3000 samples):
   1. B:     a second real set from the same distribution (perfect generator)
   2. noise: uniform random pixels (generator that produces garbage)
-  3. (next step) B with one class removed (generator that forgot a mode)
+  3. B with one class removed (generator that forgot a mode)
 """
 import math
 
@@ -13,8 +13,15 @@ from lab.judge import NUM_CLASSES, extract_features, load_judge
 from lab.metrics import (DEFAULT_K, _inside, class_entropy, fid, knn_radii,
                          pairwise_distances, prdc)
 from lab.paths import CHECKPOINT_DIR
+from lab.data import load_fmnist
 
 NOISE_SEED = 9001  # IT'S OVER 9000!
+DROP_SEED = 1984
+
+CLASS_NAMES = ["T-shirt", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Boot"]
+DROPPED_CLASS = 8
+
+TABLE_COLUMNS = ["coverage", "recall", "precision", "density", "fid", "class_entropy"]
 
 
 def check(condition: bool, description: str) -> None:
@@ -38,13 +45,82 @@ def noise_images(n: int, seed: int) -> torch.Tensor:
     return torch.randint(0, 256, (n, 28, 28), dtype=torch.uint8, generator=g)
 
 
-def print_table(results: dict[str, dict[str, float]]) -> None:
-    """One block per scenario, one line per metric, 4 decimals."""
+def drop_class_set(feat_b: torch.Tensor, idx_b: torch.Tensor, idx_a: torch.Tensor,
+                   x_test: torch.Tensor, y_test: torch.Tensor,
+                   dropped: int, judge, seed: int, num_classes: int) -> torch.Tensor:
+    """B with every sample of `dropped` removed, refilled to the same size
+    from unused test images of the other classes. Returns (len(idx_b), D) features."""
+    # Drop the class
+    keep = y_test[idx_b] != dropped
+    kept_feat = feat_b[keep]
+    n_missing = len(idx_b) - len(kept_feat)
+    assert n_missing > 0, f"class {dropped} not found in B"
+
+    # Find unused test indices (not in idx_a, not in idx_b, not in dropped class)
+    used = torch.zeros(len(y_test), dtype=torch.bool)
+    used[idx_a] = True
+    used[idx_b] = True
+    candidates = ((~used) & (y_test != dropped)).nonzero().squeeze(1)
+
+    # Pick n_missing (stratified)
+    g = torch.Generator().manual_seed(seed)
+    remaining = [c for c in range(num_classes) if c != dropped]
+    base, extra = divmod(n_missing, len(remaining))
+    refill = []
+    for i, c in enumerate(remaining):
+        n_c = base + 1 if i < extra else base
+        class_candidates = candidates[y_test[candidates] == c]
+        perm = torch.randperm(len(class_candidates), generator=g)
+        refill.append(class_candidates[perm[:n_c]])
+    refill_idx = torch.cat(refill)
+    assert len(refill_idx) == n_missing, "not enough unused candidates to refill"
+
+    refill_feat = extract_features(judge, x_test[refill_idx])
+    return torch.cat([kept_feat, refill_feat])
+
+
+def drop_class_sweep(feat_a: torch.Tensor, feat_b: torch.Tensor,
+                     idx_a: torch.Tensor, idx_b: torch.Tensor,
+                     x_test: torch.Tensor, y_test: torch.Tensor,
+                     judge, baseline: dict[str, float]) -> dict[int, dict[str, float]]:
+    """Drop each class in turn and print one row per class (report only, no checks).
+
+    The first row is the A-B baseline for comparison. Returns {class: metrics}.
+    """
+    print("Drop-class sweep")
+    header = format_header()
+    print(header)
+    print("-" * len(header))
+    print(format_row("none (A-B)", baseline))
+
+    sweep = {}
+    for c in range(NUM_CLASSES):
+        feat_drop = drop_class_set(feat_b, idx_b, idx_a, x_test, y_test,
+                                   c, judge, DROP_SEED, NUM_CLASSES)
+        labels_drop = judge.head(feat_drop).argmax(dim=1)
+        sweep[c] = evaluate(feat_a, feat_drop, labels_drop)
+        print(format_row(f"{c} {CLASS_NAMES[c]}", sweep[c]))
+    print()
+    return sweep
+
+
+def format_row(label: str, metrics: dict[str, float], decimals: int = 6) -> str:
+    """One table row: a left-aligned label, then one right-aligned column per metric."""
+    return f"{label:<12}" + "".join(f"{metrics[col]:>15.{decimals}f}" for col in TABLE_COLUMNS)
+
+
+def format_header() -> str:
+    return f"{'scenario':<12}" + "".join(f"{col:>15}" for col in TABLE_COLUMNS)
+
+
+def print_table(results: dict[str, dict[str, float]], decimals: int = 6) -> None:
+    """One row per scenario, one column per metric."""
+    header = format_header()
+    print(header)
+    print("-" * len(header))
     for scenario, metrics in results.items():
-        print(f"-------------------- Scenario: {scenario} --------------------")
-        for metric, value in metrics.items():
-            print(f" {metric:<14}: {value:>10.4f}")
-        print()
+        print(format_row(scenario, metrics, decimals))
+    print()
 
 
 def diagnose_noise_precision(real_feat: torch.Tensor, real_labels: torch.Tensor,
@@ -109,7 +185,19 @@ def main():
     noise_labels = judge.head(noise_features).argmax(dim=1)
     results["noise"] = evaluate(feat_a, noise_features, noise_labels)
 
+    # Scenario 3: Dropped Class
+    data = load_fmnist()
+    x_test, y_test = data["x_test"], data["y_test"]
+    idx_a, idx_b = ref["idx_a"], ref["idx_b"]
+    assert torch.equal(torch.bincount(y_test[idx_b], minlength=NUM_CLASSES),
+                       torch.full((NUM_CLASSES,), 300)), "idx_b does not match the stratified split"
+
+    feat_drop = drop_class_set(feat_b, idx_b, idx_a, x_test, y_test, DROPPED_CLASS, judge, DROP_SEED, NUM_CLASSES)
+    labels_drop = judge.head(feat_drop).argmax(dim=1)
+    results[f"drop {DROPPED_CLASS}"] = evaluate(feat_a, feat_drop, labels_drop)
+
     print_table(results)
+    drop_class_sweep(feat_a, feat_b, idx_a, idx_b, x_test, y_test, judge, results["A-B"])
 
     # Reference-only runs used by the checks (not printed in the table)
     a_vs_a = evaluate(feat_a, feat_a, labels_a)
@@ -132,6 +220,16 @@ def main():
     # Entropy bound
     check(results["A-B"]["class_entropy"] <= math.log(NUM_CLASSES),
           "A-B: class entropy <= log(NUM_CLASSES)")
+
+    # Dropped class: diversity metrics fall, fidelity does not
+    drop = results[f"drop {DROPPED_CLASS}"]
+    base = results["A-B"]
+    check((labels_b == y_test[idx_b]).float().mean() > 0.9,
+          "feat_b is aligned with idx_b (judge accuracy on B > 0.9)")
+    check(drop["coverage"] < base["coverage"] - 0.05, "drop: coverage falls by > 0.05")
+    check(drop["recall"] < base["recall"] - 0.05, "drop: recall falls by > 0.05")
+    check(drop["class_entropy"] < base["class_entropy"] - 0.05, "drop: entropy falls by > 0.05")
+    check(abs(drop["precision"] - base["precision"]) < 0.02, "drop: precision unchanged (within 0.02)")
 
     print(f"\n[NOTE] noise precision = {results['noise']['precision']:.4f} while "
           f"density = {results['noise']['density']:.4f}: precision counts a dense fake "
