@@ -128,7 +128,7 @@ def diagnose_noise_precision(real_feat: torch.Tensor, real_labels: torch.Tensor,
                              k: int = DEFAULT_K) -> None:
     """Explain why precision stays high on noise while density collapses.
 
-    Not called by main. Kept to rerun the same diagnosis on standardized features.
+    Not called by main.
     Findings on raw features (see notebook): 41 reals hold half of the noise
     inside their balls; noise radii are very uniform (one homogeneous cloud);
     the judge splits that cloud into shirt/bag with equal precision in both halves.
