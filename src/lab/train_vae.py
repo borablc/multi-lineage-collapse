@@ -8,7 +8,7 @@ from lab.train_judge import set_seed
 from lab.vae import VAE, nelbo
 
 SEED = 0
-EPOCHS = 30          # measurement run; the final epoch count is chosen from this curve
+EPOCHS = 50          # frozen: chosen from a 200-epoch constant-lr curve on Gen0 real data
 BATCH_SIZE = 128
 LR = 1e-3
 EVAL_SEED = 2024
@@ -63,6 +63,7 @@ def main():
     data = load_fmnist(device)
     model = VAE().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
     print("epoch|train_nelbo|test_recon| test_kl  |test_nelbo| time")
     train_zero = evaluate_nelbo(model, data["x_train"])
@@ -77,6 +78,7 @@ def main():
         dt = time.perf_counter() - t0
         test = evaluate_nelbo(model, data["x_test"])
         print(f"{epoch:4d} | {train["nelbo"]:9.2f} | {test["recon"]:8.2f} | {test["kl"]:8.2f} | {test["nelbo"]:8.2f} | {dt:.2f}")
+        scheduler.step()
 
 
 if __name__ == "__main__":
