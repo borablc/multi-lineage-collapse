@@ -1,11 +1,18 @@
 """Variational autoencoder for Fashion-MNIST.
 
-This step: ELBO terms and reparameterization. Later steps: model, training, sampling.
+This step: ELBO terms and reparameterization, and the model.
+Later steps: training, sampling.
 Reference: Kingma & Welling 2014.
 """
+import math
 
 import torch
 import torch.nn.functional as F
+from torch import nn
+
+IMAGE_SHAPE = (1, 28, 28)
+HIDDEN_DIM = 400
+LATENT_DIM = 20
 
 
 def gaussian_kl(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
@@ -55,3 +62,47 @@ def reparameterize(mu: torch.Tensor, logvar: torch.Tensor,
     sigma = torch.exp(0.5 * logvar)
     eps = torch.randn(mu.shape, generator=generator, device=mu.device, dtype=mu.dtype)
     return mu + sigma * eps
+
+
+class VAE(nn.Module):
+    """MLP VAE with a Bernoulli decoder (outputs logits) and a diagonal Gaussian encoder."""
+
+    def __init__(self, image_shape: tuple[int, ...] = IMAGE_SHAPE,
+                 hidden_dim: int = HIDDEN_DIM, latent_dim: int = LATENT_DIM):
+        super().__init__()
+
+        self.image_shape = image_shape
+        self.latent_dim = latent_dim
+        self.hidden_dim = hidden_dim
+        image_dim = math.prod(image_shape)
+
+        self.enc_body = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(image_dim, hidden_dim),
+            nn.ReLU()
+        )
+
+        self.mu_head = nn.Linear(hidden_dim, latent_dim)
+        self.logvar_head = nn.Linear(hidden_dim, latent_dim)
+
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, image_dim)
+        )
+
+    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """(B, *image_shape) float in [0, 1] -> mu (B, D), logvar (B, D)."""
+        h = self.enc_body(x)
+        return self.mu_head(h), self.logvar_head(h)
+
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        """(B, D) -> logits (B, *image_shape)."""
+        return self.decoder(z).view(-1, *self.image_shape)
+
+    def forward(self, x: torch.Tensor, generator: torch.Generator | None = None) -> tuple[
+        torch.Tensor, torch.Tensor, torch.Tensor]:
+        """(B, *image_shape) -> logits (B, *image_shape), mu (B, D), logvar (B, D)."""
+        mu, logvar = self.encode(x)
+        z = reparameterize(mu, logvar, generator=generator)
+        return self.decode(z), mu, logvar

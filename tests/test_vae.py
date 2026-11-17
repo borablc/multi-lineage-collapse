@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch.distributions import Normal, kl_divergence
 
-from lab.vae import gaussian_kl, bernoulli_nll, nelbo, reparameterize
+from lab.vae import gaussian_kl, bernoulli_nll, nelbo, reparameterize, VAE
 
 
 def test_kl_prior():
@@ -154,3 +154,74 @@ def test_reparameterize_gradient_flows_to_mu():
     expected = torch.ones_like(mu)
 
     assert torch.equal(expected, mu.grad)
+
+
+def test_vae_shapes_toys():
+    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+    x = torch.rand(5, 1, 2, 3)
+    logits, mu, logvar = model(x)
+
+    assert logits.shape == (5, 1, 2, 3), f"{logits.shape} is not (5,1,2,3)"
+    assert mu.shape == (5, 2), f"{mu.shape} is not (5,2)"
+    assert logvar.shape == (5, 2), f"{logvar.shape} is not (5,2)"
+
+
+def test_vae_shapes_actual():
+    model = VAE()
+    x = torch.rand(3, 1, 28, 28)
+    logits, mu, logvar = model(x)
+    nelbo_val = nelbo(logits, x, mu, logvar)["nelbo"]
+
+    assert logits.shape == (3, 1, 28, 28), f"{logits.shape} is not (3,1,28,28)"
+    assert mu.shape == (3, 20), f"{mu.shape} is not (3,20)"
+    assert logvar.shape == (3, 20), f"{logvar.shape} is not (3,20)"
+    assert nelbo_val.shape == (3,), f"{nelbo_val.shape} is not (3,)"
+
+
+def test_param_count():
+    model = VAE()
+
+    expected = (784 * 400 + 400) + (400 * 20 + 20) * 2 + (20 * 400 + 400) + (400 * 784 + 784)
+    out = sum(p.numel() for p in model.parameters())
+
+    assert out == expected, f"{out} != {expected}"
+
+
+def test_gradient_flows_to_model():
+    model = VAE()
+    x = torch.rand(3, 1, 28, 28)
+    logits, mu, logvar = model(x)
+
+    nelbo_val = nelbo(logits, x, mu, logvar)["nelbo"]
+    nelbo_val.mean().backward()
+
+    assert all(p.grad is not None for p in model.parameters())
+
+
+def test_same_seed_gives_same_model_and_output():
+    x = torch.rand(3, 1, 28, 28)
+
+    torch.manual_seed(0)
+    model_a = VAE()
+    torch.manual_seed(0)
+    model_b = VAE()
+
+    assert all(torch.equal(p, q) for p, q in zip(model_a.parameters(), model_b.parameters()))
+
+    generator = torch.Generator().manual_seed(1)
+    logits_a, mu_a, logvar_a = model_a(x, generator=generator)
+
+    generator = torch.Generator().manual_seed(1)
+    logits_b, mu_b, logvar_b = model_b(x, generator=generator)
+
+    assert torch.equal(logits_a, logits_b), f"{logits_a} != {logits_b}"
+
+
+def test_generator_controls_sampling():
+    x = torch.rand(3, 1, 28, 28)
+    model = VAE()
+
+    logits_1, _, _ = model(x, generator=torch.Generator().manual_seed(1))
+    logits_2, _, _ = model(x, generator=torch.Generator().manual_seed(2))
+
+    assert not torch.equal(logits_1, logits_2)
