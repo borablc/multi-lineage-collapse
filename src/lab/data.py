@@ -30,6 +30,18 @@ def preprocess(x_uint8: torch.Tensor) -> torch.Tensor:
     return x_float
 
 
+def quantize(x_float: torch.Tensor) -> torch.Tensor:
+    """Inverse of preprocess: model-space float back to stored uint8 pixels.
+
+    (N, 1, 28, 28) float in [0, 1] -> (N, 28, 28) uint8, 0..255.
+    Values are rounded (not truncated) and clamped, so quantize(preprocess(x)) == x.
+    """
+    assert x_float.is_floating_point(), f"quantize expects float in [0, 1] got {x_float.dtype}"
+    assert x_float.ndim == 4, f"quantize expects 4 dimensions, got {x_float.ndim}"
+    assert x_float.shape[1] == 1, f"quantize expects 1 channel, got {x_float.shape[1]}"
+    return torch.round(x_float * 255).clamp(0, 255).squeeze(1).to(torch.uint8)
+
+
 if __name__ == "__main__":
     d = load_fmnist()
     for k, v in d.items():
