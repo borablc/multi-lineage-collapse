@@ -225,3 +225,39 @@ def test_generator_controls_sampling():
     logits_2, _, _ = model(x, generator=torch.Generator().manual_seed(2))
 
     assert not torch.equal(logits_1, logits_2)
+
+
+def test_sample_size():
+    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+
+    out = model.sample(7)
+    expected = (7, 1, 2, 3)
+
+    assert out.shape == expected, f"out shape {out.shape} != {expected}"
+
+
+def test_sample_values():
+    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+
+    out = model.sample(10)
+
+    assert ((out >= 0) & (out <= 1)).all()
+
+
+def test_sample_repeatability():
+    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+
+    generator = torch.Generator().manual_seed(6)
+    out_1 = model.sample(10, generator=generator)
+
+    generator = torch.Generator().manual_seed(6)
+    out_2 = model.sample(10, generator=generator)
+
+    assert torch.equal(out_1, out_2), f"{out_1} != {out_2}"
+
+
+def test_sample_requires_no_grad():
+    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+    out = model.sample(1)
+
+    assert not out.requires_grad, f"{out.requires_grad}"

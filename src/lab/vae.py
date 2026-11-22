@@ -106,3 +106,15 @@ class VAE(nn.Module):
         mu, logvar = self.encode(x)
         z = reparameterize(mu, logvar, generator=generator)
         return self.decode(z), mu, logvar
+
+    @torch.no_grad()
+    def sample(self, n: int, generator: torch.Generator | None = None) -> torch.Tensor:
+        """Draws n images from the prior: z ~ N(0, I), then the decoder's mean image.
+
+        Returns (n, *image_shape) pixel intensities in [0, 1] (sigmoid of the logits;
+        no Bernoulli coin flip). Pass a seeded generator on the model's device
+        for reproducible samples.
+        """
+        device = next(self.parameters()).device
+        z = torch.randn(n, self.latent_dim, generator=generator, device=device)
+        return self.decode(z).sigmoid()
