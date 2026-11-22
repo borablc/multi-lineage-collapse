@@ -1,11 +1,14 @@
-"""Single VAE training run on real Fashion-MNIST: checks learning and measures time per epoch."""
+"""Single VAE training run on real Fashion-MNIST"""
+import json
+from datetime import datetime
 import time
 
 import torch
 
 from lab.data import load_fmnist, preprocess
-from lab.train_judge import set_seed
-from lab.vae import VAE, nelbo
+from lab.train_judge import set_seed, git_info
+from lab.vae import VAE, nelbo, HIDDEN_DIM, LATENT_DIM, load_vae
+from lab.paths import CHECKPOINT_DIR
 
 SEED = 0
 EPOCHS = 50          # frozen: chosen from a 200-epoch constant-lr curve on Gen0 real data
@@ -58,6 +61,10 @@ def evaluate_nelbo(model: VAE, x: torch.Tensor, batch_size: int = 1000,
 
 
 def main():
+    info = git_info()
+    if info["dirty"]:
+        print("WARNING: the code has uncommitted changes")
+
     device = "cuda"
     set_seed(SEED)
     data = load_fmnist(device)
@@ -79,6 +86,32 @@ def main():
         test = evaluate_nelbo(model, data["x_test"])
         print(f"{epoch:4d} | {train["nelbo"]:9.2f} | {test["recon"]:8.2f} | {test["kl"]:8.2f} | {test["nelbo"]:8.2f} | {dt:.2f}")
         scheduler.step()
+
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), CHECKPOINT_DIR / f"vae_fmnist_seed{SEED}.pt")
+    meta = {
+        "seed": SEED,
+        "epochs": EPOCHS,
+        "batch_size": BATCH_SIZE,
+        "lr": LR,
+        "schedule": "cosine",
+        "hidden_dim": HIDDEN_DIM,
+        "latent_dim": LATENT_DIM,
+        "final_test": test,          #(the last epoch's recon / kl / nelbo dict)
+        "git": info,
+        "torch": torch.__version__,
+        "created_at": datetime.now().isoformat(timespec="seconds")
+    }
+
+
+    with open(CHECKPOINT_DIR / f"vae_fmnist_seed{SEED}.json", "w") as f:
+        json.dump(meta, f, indent=2)
+
+    # reload sanity check:
+    model = load_vae(CHECKPOINT_DIR / f"vae_fmnist_seed{SEED}.pt")
+    reload_test = evaluate_nelbo(model, data["x_test"])
+    assert test["nelbo"] == reload_test["nelbo"], f"{test['nelbo']} != {reload_test['nelbo']}"
+    print(f"[PASSED] reloaded model gives identical test NELBO ({reload_test['nelbo']:.4f})")
 
 
 if __name__ == "__main__":

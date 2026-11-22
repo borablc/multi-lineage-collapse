@@ -1,7 +1,6 @@
 """Variational autoencoder for Fashion-MNIST.
 
-This step: ELBO terms and reparameterization, and the model.
-Later steps: training, sampling.
+This module: ELBO terms and reparameterization, the model, sampling and loading.
 Reference: Kingma & Welling 2014.
 """
 import math
@@ -118,3 +117,13 @@ class VAE(nn.Module):
         device = next(self.parameters()).device
         z = torch.randn(n, self.latent_dim, generator=generator, device=device)
         return self.decode(z).sigmoid()
+
+
+def load_vae(path, device: str = "cuda") -> VAE:
+    """Loads the trained vae in eval mode with all gradients disabled (frozen)."""
+    model = VAE()
+    model.load_state_dict(torch.load(path, map_location=device))
+    model.to(device).eval()
+    for p in model.parameters():
+        p.requires_grad_(False)
+    return model
