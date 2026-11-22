@@ -7,18 +7,20 @@ import torch
 
 from lab.data import load_fmnist, preprocess
 from lab.train_judge import set_seed, git_info
-from lab.vae import VAE, nelbo, HIDDEN_DIM, LATENT_DIM, load_vae
+from lab.vae import nelbo, load_vae, build_vae, BaseVAE
 from lab.paths import CHECKPOINT_DIR
 
 SEED = 0
-EPOCHS = 50          # frozen: chosen from a 200-epoch constant-lr curve on Gen0 real data
+EPOCHS = 50  # frozen: chosen from a 200-epoch constant-lr curve on Gen0 real data (ONLY FOR MLP)
 BATCH_SIZE = 128
 LR = 1e-3
 EVAL_SEED = 2024
 KEYS = ("recon", "kl", "nelbo")
 
+ARCH = "mlp"  # "mlp" or "conv", see lab.vae.ARCHITECTURES
 
-def train_one_epoch(model: VAE, optimizer: torch.optim.Optimizer,
+
+def train_one_epoch(model: BaseVAE, optimizer: torch.optim.Optimizer,
                     x_train: torch.Tensor, batch_size: int) -> dict[str, float]:
     """One shuffled pass over x_train ((N, 28, 28) uint8, on the model's device).
 
@@ -40,11 +42,11 @@ def train_one_epoch(model: VAE, optimizer: torch.optim.Optimizer,
         for k in KEYS:
             totals[k] += out[k].detach().sum()
 
-    return {k: (totals[k] / len(x_train)).item() for k in KEYS}   # (one sync per epoch)
+    return {k: (totals[k] / len(x_train)).item() for k in KEYS}  # (one sync per epoch)
 
 
 @torch.no_grad()
-def evaluate_nelbo(model: VAE, x: torch.Tensor, batch_size: int = 1000,
+def evaluate_nelbo(model: BaseVAE, x: torch.Tensor, batch_size: int = 1000,
                    seed: int = EVAL_SEED) -> dict[str, float]:
     """Mean recon, kl, nelbo per image on x ((N, 28, 28) uint8), fp32, fixed eps."""
     model.eval()
@@ -68,14 +70,15 @@ def main():
     device = "cuda"
     set_seed(SEED)
     data = load_fmnist(device)
-    model = VAE().to(device)
+    model = build_vae(ARCH).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
     print("epoch|train_nelbo|test_recon| test_kl  |test_nelbo| time")
     train_zero = evaluate_nelbo(model, data["x_train"])
     test_zero = evaluate_nelbo(model, data["x_test"])
-    print(f"   0 | {train_zero["nelbo"]:9.2f} | {test_zero["recon"]:8.2f} | {test_zero["kl"]:8.2f} | {test_zero["nelbo"]:8.2f} | 0.00")
+    print(
+        f"   0 | {train_zero["nelbo"]:9.2f} | {test_zero["recon"]:8.2f} | {test_zero["kl"]:8.2f} | {test_zero["nelbo"]:8.2f} | 0.00")
 
     for epoch in range(1, EPOCHS + 1):
         torch.cuda.synchronize()
@@ -84,31 +87,32 @@ def main():
         torch.cuda.synchronize()
         dt = time.perf_counter() - t0
         test = evaluate_nelbo(model, data["x_test"])
-        print(f"{epoch:4d} | {train["nelbo"]:9.2f} | {test["recon"]:8.2f} | {test["kl"]:8.2f} | {test["nelbo"]:8.2f} | {dt:.2f}")
+        print(
+            f"{epoch:4d} | {train["nelbo"]:9.2f} | {test["recon"]:8.2f} | {test["kl"]:8.2f} | {test["nelbo"]:8.2f} | {dt:.2f}")
         scheduler.step()
 
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), CHECKPOINT_DIR / f"vae_fmnist_seed{SEED}.pt")
+    torch.save(model.state_dict(), CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.pt")
     meta = {
         "seed": SEED,
         "epochs": EPOCHS,
         "batch_size": BATCH_SIZE,
         "lr": LR,
         "schedule": "cosine",
-        "hidden_dim": HIDDEN_DIM,
-        "latent_dim": LATENT_DIM,
-        "final_test": test,          #(the last epoch's recon / kl / nelbo dict)
+        "arch": ARCH,
+        "hidden_dim": model.hidden_dim,
+        "latent_dim": model.latent_dim,
+        "final_test": test,  # (the last epoch's recon / kl / nelbo dict)
         "git": info,
         "torch": torch.__version__,
         "created_at": datetime.now().isoformat(timespec="seconds")
     }
 
-
-    with open(CHECKPOINT_DIR / f"vae_fmnist_seed{SEED}.json", "w") as f:
+    with open(CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.json", "w") as f:
         json.dump(meta, f, indent=2)
 
     # reload sanity check:
-    model = load_vae(CHECKPOINT_DIR / f"vae_fmnist_seed{SEED}.pt")
+    model = load_vae(CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.pt", ARCH)
     reload_test = evaluate_nelbo(model, data["x_test"])
     assert test["nelbo"] == reload_test["nelbo"], f"{test['nelbo']} != {reload_test['nelbo']}"
     print(f"[PASSED] reloaded model gives identical test NELBO ({reload_test['nelbo']:.4f})")

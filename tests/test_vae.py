@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch.distributions import Normal, kl_divergence
 
-from lab.vae import gaussian_kl, bernoulli_nll, nelbo, reparameterize, VAE
+from lab.vae import gaussian_kl, bernoulli_nll, nelbo, reparameterize, MLPVAE, build_vae
 
 
 def test_kl_prior():
@@ -156,8 +156,8 @@ def test_reparameterize_gradient_flows_to_mu():
     assert torch.equal(expected, mu.grad)
 
 
-def test_vae_shapes_toys():
-    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+def test_mlp_vae_shapes_toys():
+    model = MLPVAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
     x = torch.rand(5, 1, 2, 3)
     logits, mu, logvar = model(x)
 
@@ -166,8 +166,9 @@ def test_vae_shapes_toys():
     assert logvar.shape == (5, 2), f"{logvar.shape} is not (5,2)"
 
 
-def test_vae_shapes_actual():
-    model = VAE()
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_vae_shapes_actual(arch: str):
+    model = build_vae(arch)
     x = torch.rand(3, 1, 28, 28)
     logits, mu, logvar = model(x)
     nelbo_val = nelbo(logits, x, mu, logvar)["nelbo"]
@@ -178,17 +179,20 @@ def test_vae_shapes_actual():
     assert nelbo_val.shape == (3,), f"{nelbo_val.shape} is not (3,)"
 
 
-def test_param_count():
-    model = VAE()
-
-    expected = (784 * 400 + 400) + (400 * 20 + 20) * 2 + (20 * 400 + 400) + (400 * 784 + 784)
+@pytest.mark.parametrize("arch, expected", [
+    ("mlp", (784 * 400 + 400) + (400 * 20 + 20) * 2 + (20 * 400 + 400) + (400 * 784 + 784)),
+    ("conv", (1 * 32 * 4 * 4 + 32) + (32 * 64 * 4 * 4 + 64) + (64 * 7 * 7 * 256 + 256) + (256 * 20 + 20) * 2 + (
+            20 * 256 + 256) + (256 * 64 * 7 * 7 + 64 * 7 * 7) + (64 * 32 * 4 * 4 + 32) + (32 * 1 * 4 * 4 + 1))])
+def test_vae_param_count(arch, expected: int):
+    model = build_vae(arch)
     out = sum(p.numel() for p in model.parameters())
 
     assert out == expected, f"{out} != {expected}"
 
 
-def test_gradient_flows_to_model():
-    model = VAE()
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_gradient_flows_to_model(arch: str):
+    model = build_vae(arch)
     x = torch.rand(3, 1, 28, 28)
     logits, mu, logvar = model(x)
 
@@ -198,13 +202,14 @@ def test_gradient_flows_to_model():
     assert all(p.grad is not None for p in model.parameters())
 
 
-def test_same_seed_gives_same_model_and_output():
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_same_seed_gives_same_model_and_output(arch):
     x = torch.rand(3, 1, 28, 28)
 
     torch.manual_seed(0)
-    model_a = VAE()
+    model_a = build_vae(arch)
     torch.manual_seed(0)
-    model_b = VAE()
+    model_b = build_vae(arch)
 
     assert all(torch.equal(p, q) for p, q in zip(model_a.parameters(), model_b.parameters()))
 
@@ -217,9 +222,10 @@ def test_same_seed_gives_same_model_and_output():
     assert torch.equal(logits_a, logits_b), f"{logits_a} != {logits_b}"
 
 
-def test_generator_controls_sampling():
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_generator_controls_sampling(arch: str):
     x = torch.rand(3, 1, 28, 28)
-    model = VAE()
+    model = build_vae(arch)
 
     logits_1, _, _ = model(x, generator=torch.Generator().manual_seed(1))
     logits_2, _, _ = model(x, generator=torch.Generator().manual_seed(2))
@@ -227,25 +233,28 @@ def test_generator_controls_sampling():
     assert not torch.equal(logits_1, logits_2)
 
 
-def test_sample_size():
-    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_sample_size(arch: str):
+    model = build_vae(arch)
 
     out = model.sample(7)
-    expected = (7, 1, 2, 3)
+    expected = (7, 1, 28, 28)
 
     assert out.shape == expected, f"out shape {out.shape} != {expected}"
 
 
-def test_sample_values():
-    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_sample_values(arch: str):
+    model = build_vae(arch)
 
     out = model.sample(10)
 
     assert ((out >= 0) & (out <= 1)).all()
 
 
-def test_sample_repeatability():
-    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_sample_repeatability(arch: str):
+    model = build_vae(arch)
 
     generator = torch.Generator().manual_seed(6)
     out_1 = model.sample(10, generator=generator)
@@ -256,8 +265,14 @@ def test_sample_repeatability():
     assert torch.equal(out_1, out_2), f"{out_1} != {out_2}"
 
 
-def test_sample_requires_no_grad():
-    model = VAE(image_shape=(1, 2, 3), hidden_dim=4, latent_dim=2)
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_sample_requires_no_grad(arch: str):
+    model = build_vae(arch)
     out = model.sample(1)
 
     assert not out.requires_grad, f"{out.requires_grad}"
+
+
+def test_build_vae_unknown_arch():
+    with pytest.raises(KeyError):
+        build_vae("vit")
