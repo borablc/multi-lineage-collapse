@@ -5,7 +5,8 @@ import pytest
 import torch
 from torch.distributions import Normal, kl_divergence
 
-from lab.vae import gaussian_kl, bernoulli_nll, nelbo, reparameterize, MLPVAE, build_vae
+from lab.vae.model import MLPVAE, build_vae
+from lab.vae.elbo import gaussian_kl, bernoulli_nll, nelbo, reparameterize
 
 
 def test_kl_prior():

@@ -11,6 +11,8 @@ Part 3: Class Entropy.
 
 import torch
 
+from lab.data import NUM_CLASSES
+
 DEFAULT_K = 5
 
 
@@ -151,3 +153,12 @@ def class_entropy(labels: torch.Tensor, num_classes: int) -> float:
     p = counts / counts.sum()
     H = -torch.sum(torch.special.xlogy(p, p)).item()
     return H
+
+
+def evaluate(real_feat: torch.Tensor, fake_feat: torch.Tensor,
+             fake_labels: torch.Tensor) -> dict[str, float]:
+    """All metrics of one fake set against the real reference."""
+    metrics_dic = prdc(real_feat, fake_feat)
+    metrics_dic["fid"] = fid(real_feat, fake_feat)
+    metrics_dic["class_entropy"] = class_entropy(fake_labels, NUM_CLASSES)
+    return metrics_dic

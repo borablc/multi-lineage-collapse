@@ -4,7 +4,7 @@ from math import log
 import pytest
 import torch
 
-from lab.metrics import _sqrt_psd, fid, prdc, class_entropy
+from lab.metrics.core import _sqrt_psd, fid, prdc, class_entropy
 
 F64 = torch.float64
 I64 = torch.int64
@@ -147,6 +147,7 @@ def test_fid_symmetry(fake):
 
 def test_fid_identity():
     assert fid(REAL_3D, REAL_3D) == pytest.approx(0, abs=1e-9)
+
 
 # ---------------------------------------------------------------------------
 # Class Entropy

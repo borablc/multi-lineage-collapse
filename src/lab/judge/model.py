@@ -2,10 +2,9 @@
 import torch
 from torch import nn
 
-from lab.data import preprocess
+from lab.data import preprocess, NUM_CLASSES
 
 FEATURE_DIM = 128
-NUM_CLASSES = 10
 
 
 def conv_block(in_ch: int, out_ch: int) -> nn.Sequential:
@@ -34,6 +33,12 @@ class JudgeCNN(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """(N, 1, 28, 28) float -> (N, NUM_CLASSES) logits."""
         return self.head(self.features(x))
+
+    @torch.no_grad()
+    def labels(self, feat: torch.Tensor) -> torch.Tensor:
+        """(N, FEATURE_DIM) features -> (N,) predicted class labels, on CPU."""
+        device = next(self.parameters()).device
+        return self.head(feat.to(device)).argmax(dim=1).cpu()
 
 
 def load_judge(path, device: str = "cuda") -> JudgeCNN:

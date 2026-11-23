@@ -1,6 +1,9 @@
 import torch
 from torchvision import datasets
+
 from lab.paths import DATA_ROOT
+
+NUM_CLASSES = 10
 
 
 def load_fmnist(device: str = "cpu") -> dict[str, torch.Tensor]:

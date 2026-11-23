@@ -2,11 +2,11 @@
 import torch
 from torchvision.utils import save_image
 
-from lab.data import load_fmnist, preprocess, quantize
-from lab.judge import NUM_CLASSES, extract_features, load_judge
+from lab.data import load_fmnist, preprocess, quantize, NUM_CLASSES
+from lab.judge.model import extract_features, load_judge
 from lab.paths import CHECKPOINT_DIR, RUNS_DIR
-from lab.sanity_metrics import evaluate
-from lab.vae import load_vae
+from lab.metrics.core import evaluate
+from lab.vae.model import load_vae
 
 N_SAMPLES = 3000  # same size as reference A, so k-NN metrics and FID are comparable
 SAMPLE_SEED = 3110
@@ -36,7 +36,7 @@ def main():
     generator = torch.Generator(device=device).manual_seed(SAMPLE_SEED)
     x_fake = quantize(vae.sample(N_SAMPLES, generator=generator))
     feat_fake = extract_features(judge, x_fake)
-    labels_fake = judge.head(feat_fake.to(device)).argmax(dim=1).cpu()
+    labels_fake = judge.labels(feat_fake.to(device))
     print(evaluate(ref["feat_a"], feat_fake, labels_fake))
     print(torch.bincount(labels_fake, minlength=NUM_CLASSES).tolist())
 
@@ -45,7 +45,7 @@ def main():
     mu, _ = vae.encode(preprocess(x_b))  # (no sampling: the best guess)
     x_recon = quantize(vae.decode(mu).sigmoid())
     feat_recon = extract_features(judge, x_recon)
-    labels_recon = judge.head(feat_recon.to(device)).argmax(dim=1).cpu()
+    labels_recon = judge.labels(feat_recon.to(device))
     print(evaluate(ref["feat_a"], feat_recon, labels_recon))
     print(torch.bincount(labels_recon, minlength=NUM_CLASSES).tolist())
 

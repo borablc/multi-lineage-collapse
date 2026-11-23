@@ -2,12 +2,12 @@
 import torch
 
 from lab.data import load_fmnist
-from lab.judge import extract_features, load_judge
+from lab.judge.model import extract_features, load_judge
 from lab.paths import CHECKPOINT_DIR
+from lab.data import NUM_CLASSES
 
 SEED = 1234
 PER_CLASS = 300
-NUM_CLASSES = 10
 
 
 def stratified_split(y: torch.Tensor, per_class: int, seed: int) -> tuple[torch.Tensor, torch.Tensor]:

@@ -6,8 +6,9 @@ import time
 import torch
 
 from lab.data import load_fmnist, preprocess
-from lab.train_judge import set_seed, git_info
-from lab.vae import nelbo, load_vae, build_vae, BaseVAE
+from lab.utils import set_seed, git_info
+from lab.vae.model import load_vae, build_vae, BaseVAE
+from lab.vae.elbo import nelbo
 from lab.paths import CHECKPOINT_DIR
 
 SEED = 0
@@ -16,8 +17,8 @@ BATCH_SIZE = 128
 LR = 1e-3
 EVAL_SEED = 2024
 KEYS = ("recon", "kl", "nelbo")
-SCHEDULE = "cosine"        # "cosine" or "constant"
-SAVE_CHECKPOINT = True     # False for measurement runs, so the real checkpoint is not overwritten
+SCHEDULE = "cosine"  # "cosine" or "constant"
+SAVE_CHECKPOINT = True  # False for measurement runs, so the real checkpoint is not overwritten
 
 ARCH = "conv"  # "mlp" or "conv", see lab.vae.ARCHITECTURES
 

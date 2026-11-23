@@ -9,11 +9,11 @@ import math
 
 import torch
 
-from lab.judge import NUM_CLASSES, extract_features, load_judge
-from lab.metrics import (DEFAULT_K, _inside, class_entropy, fid, knn_radii,
-                         pairwise_distances, prdc)
+from lab.judge.model import extract_features, load_judge
+from lab.metrics.core import DEFAULT_K, _inside, knn_radii, pairwise_distances, evaluate
 from lab.paths import CHECKPOINT_DIR
-from lab.data import load_fmnist
+from lab.data import load_fmnist, NUM_CLASSES
+from lab.utils import check
 
 NOISE_SEED = 9001  # IT'S OVER 9000!
 DROP_SEED = 1984
@@ -22,21 +22,6 @@ CLASS_NAMES = ["T-shirt", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shi
 DROPPED_CLASS = 8
 
 TABLE_COLUMNS = ["coverage", "recall", "precision", "density", "fid", "class_entropy"]
-
-
-def check(condition: bool, description: str) -> None:
-    """Assert a sanity condition and report it by name."""
-    assert condition, f"FAILED: {description}"
-    print(f"[PASSED] {description}")
-
-
-def evaluate(real_feat: torch.Tensor, fake_feat: torch.Tensor,
-             fake_labels: torch.Tensor) -> dict[str, float]:
-    """All metrics of one fake set against the real reference."""
-    metrics_dic = prdc(real_feat, fake_feat)
-    metrics_dic["fid"] = fid(real_feat, fake_feat)
-    metrics_dic["class_entropy"] = class_entropy(fake_labels, NUM_CLASSES)
-    return metrics_dic
 
 
 def noise_images(n: int, seed: int) -> torch.Tensor:
@@ -97,7 +82,7 @@ def drop_class_sweep(feat_a: torch.Tensor, feat_b: torch.Tensor,
     for c in range(NUM_CLASSES):
         feat_drop = drop_class_set(feat_b, idx_b, idx_a, x_test, y_test,
                                    c, judge, DROP_SEED, NUM_CLASSES)
-        labels_drop = judge.head(feat_drop).argmax(dim=1)
+        labels_drop = judge.labels(feat_drop)
         sweep[c] = evaluate(feat_a, feat_drop, labels_drop)
         print(format_row(f"{c} {CLASS_NAMES[c]}", sweep[c]))
     print()
@@ -171,8 +156,8 @@ def main():
     feat_a, feat_b = ref["feat_a"], ref["feat_b"]
     judge = load_judge(CHECKPOINT_DIR / "judge_fmnist.pt", device="cpu")
 
-    labels_a = judge.head(feat_a).argmax(dim=1)
-    labels_b = judge.head(feat_b).argmax(dim=1)
+    labels_a = judge.labels(feat_a)
+    labels_b = judge.labels(feat_b)
 
     results = {}
 
@@ -182,7 +167,7 @@ def main():
     # Scenario 2: noise
     x_noise = noise_images(len(feat_a), NOISE_SEED)
     noise_features = extract_features(judge, x_noise)
-    noise_labels = judge.head(noise_features).argmax(dim=1)
+    noise_labels = judge.labels(noise_features)
     results["noise"] = evaluate(feat_a, noise_features, noise_labels)
 
     # Scenario 3: Dropped Class
@@ -193,7 +178,7 @@ def main():
                        torch.full((NUM_CLASSES,), 300)), "idx_b does not match the stratified split"
 
     feat_drop = drop_class_set(feat_b, idx_b, idx_a, x_test, y_test, DROPPED_CLASS, judge, DROP_SEED, NUM_CLASSES)
-    labels_drop = judge.head(feat_drop).argmax(dim=1)
+    labels_drop = judge.labels(feat_drop)
     results[f"drop {DROPPED_CLASS}"] = evaluate(feat_a, feat_drop, labels_drop)
 
     print_table(results)
