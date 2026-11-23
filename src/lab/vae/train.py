@@ -5,7 +5,7 @@ import time
 
 import torch
 
-from lab.data import load_fmnist, preprocess
+from lab.data import load_fmnist, preprocess, quantize
 from lab.utils import set_seed, git_info
 from lab.vae.model import load_vae, build_vae, BaseVAE
 from lab.vae.elbo import nelbo
@@ -17,6 +17,7 @@ BATCH_SIZE = 128
 LR = 1e-3
 EVAL_SEED = 2024
 KEYS = ("recon", "kl", "nelbo")
+GEN_CHUNK = 10_000
 SCHEDULE = "cosine"  # "cosine" or "constant"
 SAVE_CHECKPOINT = True  # False for measurement runs, so the real checkpoint is not overwritten
 
@@ -63,6 +64,43 @@ def evaluate_nelbo(model: BaseVAE, x: torch.Tensor, batch_size: int = 1000,
             totals[k] += out[k].detach().sum()
 
     return {k: (totals[k] / len(x)).item() for k in KEYS}
+
+
+@torch.no_grad()
+def generate_uint8(model: BaseVAE, n: int, generator: torch.Generator,
+                   chunk: int = GEN_CHUNK) -> torch.Tensor:
+    """n prior samples as (n, 28, 28) uint8, the form they enter the pool.
+
+    Generated in chunks so 60k samples do not need one big tensor on the GPU.
+    All latents are drawn at once, so the chunk size does not change which images
+    are generated. Matmul summation order can depend on the batch size, so a few
+    pixels may differ by one gray level; keep chunk fixed for bit-exact runs.
+    """
+    device = next(model.parameters()).device
+    z = torch.randn(n, model.latent_dim, generator=generator, device=device)
+    out = []
+    for i in range(0, len(z), chunk):
+        out.append(quantize(model.mean_image(z[i:i + chunk])))
+    return torch.cat(out)
+
+
+def train_vae(x_uint8: torch.Tensor, arch: str, seed: int, epochs: int = EPOCHS) -> BaseVAE:
+    """Fresh VAE trained with the official recipe (Adam, cosine, bf16 forward) on x_uint8.
+
+    x_uint8: (N, 28, 28) on the training device. Quiet (no per-epoch printing).
+    Returns the model in eval mode.
+    """
+    set_seed(seed)
+    model = build_vae(arch).to(x_uint8.device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+    for _ in range(epochs):
+        train_one_epoch(model, optimizer, x_uint8, BATCH_SIZE)
+        scheduler.step()
+
+    model.eval()
+    return model
 
 
 def main():

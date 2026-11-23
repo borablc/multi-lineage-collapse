@@ -41,6 +41,11 @@ class BaseVAE(nn.Module):
         return self.decode(z), mu, logvar
 
     @torch.no_grad()
+    def mean_image(self, z: torch.Tensor) -> torch.Tensor:
+        """(B, D) latents -> (B, 1, H, W) decoder mean image in [0, 1] (no Bernoulli coin flip)."""
+        return self.decode(z).sigmoid()
+
+    @torch.no_grad()
     def sample(self, n: int, generator: torch.Generator | None = None) -> torch.Tensor:
         """Draws n images from the prior: z ~ N(0, I), then the decoder's mean image.
 
@@ -50,7 +55,7 @@ class BaseVAE(nn.Module):
         """
         device = next(self.parameters()).device
         z = torch.randn(n, self.latent_dim, generator=generator, device=device)
-        return self.decode(z).sigmoid()
+        return self.mean_image(z)
 
 
 class MLPVAE(BaseVAE):

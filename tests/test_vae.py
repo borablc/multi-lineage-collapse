@@ -7,6 +7,7 @@ from torch.distributions import Normal, kl_divergence
 
 from lab.vae.model import MLPVAE, build_vae
 from lab.vae.elbo import gaussian_kl, bernoulli_nll, nelbo, reparameterize
+from lab.vae.train import generate_uint8, train_vae
 
 
 def test_kl_prior():
@@ -277,3 +278,56 @@ def test_sample_requires_no_grad(arch: str):
 def test_build_vae_unknown_arch():
     with pytest.raises(KeyError):
         build_vae("vit")
+
+
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_generate_uint8_shape(arch: str):
+    model = build_vae(arch)
+    generator = torch.Generator().manual_seed(1)
+
+    out = generate_uint8(model, 7, generator=generator, chunk=3)
+    expected = (7, 28, 28)
+
+    assert out.dtype == torch.uint8, f"{out.dtype} != torch.uint8"
+    assert out.shape == expected, f"out shape {out.shape} != {expected}"
+
+
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_generate_uint8_reproducible(arch: str):
+    model = build_vae(arch)
+
+    generator = torch.Generator().manual_seed(1)
+    out1 = generate_uint8(model, 7, generator=generator, chunk=3)
+
+    generator = torch.Generator().manual_seed(1)
+    out2 = generate_uint8(model, 7, generator=generator, chunk=3)
+
+    assert torch.equal(out1, out2), f"{out1} != {out2}"
+
+
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_generate_uint8_chunk_changes_only_rounding(arch: str):
+    model = build_vae(arch)
+
+    generator = torch.Generator().manual_seed(1)
+    out1 = generate_uint8(model, 500, generator=generator, chunk=100)
+
+    generator = torch.Generator().manual_seed(1)
+    out2 = generate_uint8(model, 500, generator=generator, chunk=3)
+
+    diff = (out1.int() - out2.int()).abs()
+    assert diff.max() <= 1, "chunk size changed the images, not just rounding"
+    assert (diff > 0).float().mean() < 1e-4, "too many pixels differ"
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="train_one_epoch uses CUDA autocast")
+@pytest.mark.parametrize("arch", ["mlp", "conv"])
+def test_train_vae_same_seed_same_model(arch: str):
+    generator = torch.Generator(device="cuda").manual_seed(1)
+    x = torch.randint(0, 256, (256, 28, 28), dtype=torch.uint8, device="cuda", generator=generator)
+    model_a = train_vae(x, arch=arch, seed=0, epochs=1)
+    model_b = train_vae(x, arch=arch, seed=0, epochs=1)
+
+    assert not model_a.training, f"{model_a.training}"
+    assert not model_b.training, f"{model_b.training}"
+    assert all(torch.equal(p, q) for p, q in zip(model_a.parameters(), model_b.parameters()))
