@@ -32,7 +32,7 @@ def noise_images(n: int, seed: int) -> torch.Tensor:
 
 def drop_class_set(feat_b: torch.Tensor, idx_b: torch.Tensor, idx_a: torch.Tensor,
                    x_test: torch.Tensor, y_test: torch.Tensor,
-                   dropped: int, judge, seed: int, num_classes: int) -> torch.Tensor:
+                   dropped: int, judge, seed: int) -> torch.Tensor:
     """B with every sample of `dropped` removed, refilled to the same size
     from unused test images of the other classes. Returns (len(idx_b), D) features."""
     # Drop the class
@@ -49,7 +49,7 @@ def drop_class_set(feat_b: torch.Tensor, idx_b: torch.Tensor, idx_a: torch.Tenso
 
     # Pick n_missing (stratified)
     g = torch.Generator().manual_seed(seed)
-    remaining = [c for c in range(num_classes) if c != dropped]
+    remaining = [c for c in range(NUM_CLASSES) if c != dropped]
     base, extra = divmod(n_missing, len(remaining))
     refill = []
     for i, c in enumerate(remaining):
@@ -68,7 +68,7 @@ def drop_class_sweep(feat_a: torch.Tensor, feat_b: torch.Tensor,
                      idx_a: torch.Tensor, idx_b: torch.Tensor,
                      x_test: torch.Tensor, y_test: torch.Tensor,
                      judge, baseline: dict[str, float]) -> dict[int, dict[str, float]]:
-    """Drop each class in turn and print one row per class (report only, no checks).
+    """Drop each class in turn and print one row per class (checks are in main).
 
     The first row is the A-B baseline for comparison. Returns {class: metrics}.
     """
@@ -80,8 +80,7 @@ def drop_class_sweep(feat_a: torch.Tensor, feat_b: torch.Tensor,
 
     sweep = {}
     for c in range(NUM_CLASSES):
-        feat_drop = drop_class_set(feat_b, idx_b, idx_a, x_test, y_test,
-                                   c, judge, DROP_SEED, NUM_CLASSES)
+        feat_drop = drop_class_set(feat_b, idx_b, idx_a, x_test, y_test, c, judge, DROP_SEED)
         labels_drop = judge.labels(feat_drop)
         sweep[c] = evaluate(feat_a, feat_drop, labels_drop)
         print(format_row(f"{c} {CLASS_NAMES[c]}", sweep[c]))
@@ -113,7 +112,7 @@ def diagnose_noise_precision(real_feat: torch.Tensor, real_labels: torch.Tensor,
                              k: int = DEFAULT_K) -> None:
     """Explain why precision stays high on noise while density collapses.
 
-    Not called by main.
+    Not called by main. Kept only to reproduce the noise precision finding.
     Findings on raw features (see notebook): 41 reals hold half of the noise
     inside their balls; noise radii are very uniform (one homogeneous cloud);
     the judge splits that cloud into shirt/bag with equal precision in both halves.
@@ -176,13 +175,15 @@ def main():
     idx_a, idx_b = ref["idx_a"], ref["idx_b"]
     assert torch.equal(torch.bincount(y_test[idx_b], minlength=NUM_CLASSES),
                        torch.full((NUM_CLASSES,), 300)), "idx_b does not match the stratified split"
+    check((labels_b == y_test[idx_b]).float().mean() > 0.9,
+          "feat_b is aligned with idx_b (judge accuracy on B > 0.9)")
 
-    feat_drop = drop_class_set(feat_b, idx_b, idx_a, x_test, y_test, DROPPED_CLASS, judge, DROP_SEED, NUM_CLASSES)
+    feat_drop = drop_class_set(feat_b, idx_b, idx_a, x_test, y_test, DROPPED_CLASS, judge, DROP_SEED)
     labels_drop = judge.labels(feat_drop)
     results[f"drop {DROPPED_CLASS}"] = evaluate(feat_a, feat_drop, labels_drop)
 
     print_table(results)
-    drop_class_sweep(feat_a, feat_b, idx_a, idx_b, x_test, y_test, judge, results["A-B"])
+    sweep = drop_class_sweep(feat_a, feat_b, idx_a, idx_b, x_test, y_test, judge, results["A-B"])
 
     # Reference-only runs used by the checks (not printed in the table)
     a_vs_a = evaluate(feat_a, feat_a, labels_a)
@@ -209,12 +210,16 @@ def main():
     # Dropped class: diversity metrics fall, fidelity does not
     drop = results[f"drop {DROPPED_CLASS}"]
     base = results["A-B"]
-    check((labels_b == y_test[idx_b]).float().mean() > 0.9,
-          "feat_b is aligned with idx_b (judge accuracy on B > 0.9)")
     check(drop["coverage"] < base["coverage"] - 0.05, "drop: coverage falls by > 0.05")
     check(drop["recall"] < base["recall"] - 0.05, "drop: recall falls by > 0.05")
     check(drop["class_entropy"] < base["class_entropy"] - 0.05, "drop: entropy falls by > 0.05")
     check(abs(drop["precision"] - base["precision"]) < 0.02, "drop: precision unchanged (within 0.02)")
+
+    # Every class: coverage falls, precision does not move
+    check(all(m["coverage"] < base["coverage"] for m in sweep.values()),
+          "sweep: coverage below baseline for all 10 classes")
+    check(all(abs(m["precision"] - base["precision"]) < 0.02 for m in sweep.values()),
+          "sweep: precision within 0.02 of baseline for all 10 classes")
 
     print(f"\n[NOTE] noise precision = {results['noise']['precision']:.4f} while "
           f"density = {results['noise']['density']:.4f}: precision counts a dense fake "

@@ -1,4 +1,7 @@
 """Builds the fixed real reference subsamples and caches their judge features. Run once."""
+from datetime import datetime
+import json
+
 import torch
 
 from lab.data import load_fmnist
@@ -17,6 +20,8 @@ def stratified_split(y: torch.Tensor, per_class: int, seed: int) -> tuple[torch.
     for c in range(NUM_CLASSES):
         class_idx = torch.nonzero(y == c).squeeze(1)
         class_idx = class_idx[torch.randperm(len(class_idx), generator=g)]
+        assert len(class_idx) >= 2 * per_class, \
+            f"class {c} has {len(class_idx)} samples, need {2 * per_class}"
         idx_a.append(class_idx[:per_class])
         idx_b.append(class_idx[per_class:2 * per_class])
     return torch.cat(idx_a), torch.cat(idx_b)
@@ -29,12 +34,22 @@ def main() -> None:
 
     idx_a, idx_b = stratified_split(d["y_test"], PER_CLASS, SEED)
 
-    feat_a = extract_features(judge, d["x_test"][idx_a].to(device))
-    feat_b = extract_features(judge, d["x_test"][idx_b].to(device))
-    feat_train = extract_features(judge, d["x_train"].to(device))
+    feat_a = extract_features(judge, d["x_test"][idx_a])
+    feat_b = extract_features(judge, d["x_test"][idx_b])
+    feat_train = extract_features(judge, d["x_train"])
 
-    ref = {"seed": SEED, "idx_a": idx_a, "idx_b": idx_b,
-           "feat_a": feat_a, "feat_b": feat_b, "feat_train": feat_train}
+    with open(CHECKPOINT_DIR / "judge_fmnist.json") as f:
+        judge_meta = json.load(f)
+
+    ref = {"seed": SEED,
+           "idx_a": idx_a,
+           "idx_b": idx_b,
+           "feat_a": feat_a,
+           "feat_b": feat_b,
+           "feat_train": feat_train,
+           "judge_commit": judge_meta["git"]["commit"],
+           "created_at": datetime.now().isoformat(timespec="seconds")}
+
     torch.save(ref, CHECKPOINT_DIR / "reference_fmnist.pt")
 
     # --- sanity checks ---

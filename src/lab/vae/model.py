@@ -1,9 +1,11 @@
-"""Variational autoencoder for Fashion-MNIST.
+"""VAE architectures for Fashion-MNIST.
 
-This module: ELBO terms and reparameterization, the model, sampling and loading.
+This module: BaseVAE (shared forward and sampling), MLPVAE and ConvVAE,
+and the build / load helpers. ELBO terms live in lab.vae.elbo.
 Reference: Kingma & Welling 2014.
 """
 import math
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -125,7 +127,7 @@ class ConvVAE(BaseVAE):
         return self.decoder(z)
 
 
-ARCHITECTURES = {"mlp": MLPVAE, "conv": ConvVAE}
+ARCHITECTURES: dict[str, Callable[[], BaseVAE]] = {"mlp": MLPVAE, "conv": ConvVAE}
 
 
 def build_vae(arch: str) -> BaseVAE:

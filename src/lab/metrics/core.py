@@ -150,7 +150,7 @@ def class_entropy(labels: torch.Tensor, num_classes: int) -> float:
     Blind to within-class collapse: one sample per class still scores the max.
     """
     counts = torch.bincount(labels, minlength=num_classes)
-    p = counts / counts.sum()
+    p = counts.double() / counts.sum()
     H = -torch.sum(torch.special.xlogy(p, p)).item()
     return H
 

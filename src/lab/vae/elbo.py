@@ -1,3 +1,14 @@
+"""ELBO terms and the reparameterization trick for the VAEs.
+
+NELBO = recon + KL, per sample, in nats:
+  - recon: -log p(x | z) under a per-pixel Bernoulli (BCE with logits),
+    summed over pixels
+  - KL: closed-form KL( N(mu, exp(logvar)) || N(0, I) ), summed over latent dims
+No batch reduction: callers take .mean() for training and keep per-sample
+values for evaluation.
+
+Reference: Kingma & Welling 2014.
+"""
 import torch
 import torch.nn.functional as F
 

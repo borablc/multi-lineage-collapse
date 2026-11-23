@@ -26,7 +26,7 @@ def test_houses_prdc():
 
 def test_identity_gives_all_ones():
     res = prdc(HOUSES_REAL, HOUSES_REAL, k=2)
-    assert all(v == pytest.approx(1.0) for v in res.values())
+    assert all(v == 1.0 for v in res.values())
 
 
 def test_precision_recall_swap():

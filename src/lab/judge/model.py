@@ -56,8 +56,9 @@ def extract_features(judge: JudgeCNN, x_uint8: torch.Tensor, batch_size: int = 1
     """(N, 28, 28) uint8 -> (N, FEATURE_DIM) float32 on CPU. The judge must be frozen."""
     assert not judge.training, "judge must be in eval mode"
     out = []
+    device = next(judge.parameters()).device
     for i in range(0, len(x_uint8), batch_size):
-        xb = x_uint8[i:i + batch_size]
+        xb = x_uint8[i:i + batch_size].to(device)
         out.append(judge.features(preprocess(xb)).cpu())
     return torch.cat(out)
 
