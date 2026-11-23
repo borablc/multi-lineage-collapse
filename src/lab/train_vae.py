@@ -11,13 +11,15 @@ from lab.vae import nelbo, load_vae, build_vae, BaseVAE
 from lab.paths import CHECKPOINT_DIR
 
 SEED = 0
-EPOCHS = 50  # frozen: chosen from a 200-epoch constant-lr curve on Gen0 real data (ONLY FOR MLP)
+EPOCHS = 50  # frozen: chosen from 200-epoch constant-lr curves on Gen0 real data (mlp and conv)
 BATCH_SIZE = 128
 LR = 1e-3
 EVAL_SEED = 2024
 KEYS = ("recon", "kl", "nelbo")
+SCHEDULE = "cosine"        # "cosine" or "constant"
+SAVE_CHECKPOINT = True     # False for measurement runs, so the real checkpoint is not overwritten
 
-ARCH = "mlp"  # "mlp" or "conv", see lab.vae.ARCHITECTURES
+ARCH = "conv"  # "mlp" or "conv", see lab.vae.ARCHITECTURES
 
 
 def train_one_epoch(model: BaseVAE, optimizer: torch.optim.Optimizer,
@@ -72,7 +74,8 @@ def main():
     data = load_fmnist(device)
     model = build_vae(ARCH).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+    if SCHEDULE == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
     print("epoch|train_nelbo|test_recon| test_kl  |test_nelbo| time")
     train_zero = evaluate_nelbo(model, data["x_train"])
@@ -89,33 +92,35 @@ def main():
         test = evaluate_nelbo(model, data["x_test"])
         print(
             f"{epoch:4d} | {train["nelbo"]:9.2f} | {test["recon"]:8.2f} | {test["kl"]:8.2f} | {test["nelbo"]:8.2f} | {dt:.2f}")
-        scheduler.step()
+        if SCHEDULE == "cosine":
+            scheduler.step()
 
-    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.pt")
-    meta = {
-        "seed": SEED,
-        "epochs": EPOCHS,
-        "batch_size": BATCH_SIZE,
-        "lr": LR,
-        "schedule": "cosine",
-        "arch": ARCH,
-        "hidden_dim": model.hidden_dim,
-        "latent_dim": model.latent_dim,
-        "final_test": test,  # (the last epoch's recon / kl / nelbo dict)
-        "git": info,
-        "torch": torch.__version__,
-        "created_at": datetime.now().isoformat(timespec="seconds")
-    }
+    if SAVE_CHECKPOINT:
+        CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+        torch.save(model.state_dict(), CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.pt")
+        meta = {
+            "seed": SEED,
+            "epochs": EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "lr": LR,
+            "schedule": SCHEDULE,
+            "arch": ARCH,
+            "hidden_dim": model.hidden_dim,
+            "latent_dim": model.latent_dim,
+            "final_test": test,  # (the last epoch's recon / kl / nelbo dict)
+            "git": info,
+            "torch": torch.__version__,
+            "created_at": datetime.now().isoformat(timespec="seconds")
+        }
 
-    with open(CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.json", "w") as f:
-        json.dump(meta, f, indent=2)
+        with open(CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.json", "w") as f:
+            json.dump(meta, f, indent=2)
 
-    # reload sanity check:
-    model = load_vae(CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.pt", ARCH)
-    reload_test = evaluate_nelbo(model, data["x_test"])
-    assert test["nelbo"] == reload_test["nelbo"], f"{test['nelbo']} != {reload_test['nelbo']}"
-    print(f"[PASSED] reloaded model gives identical test NELBO ({reload_test['nelbo']:.4f})")
+        # reload sanity check:
+        model = load_vae(CHECKPOINT_DIR / f"vae_fmnist_{ARCH}_seed{SEED}.pt", ARCH)
+        reload_test = evaluate_nelbo(model, data["x_test"])
+        assert test["nelbo"] == reload_test["nelbo"], f"{test['nelbo']} != {reload_test['nelbo']}"
+        print(f"[PASSED] reloaded model gives identical test NELBO ({reload_test['nelbo']:.4f})")
 
 
 if __name__ == "__main__":
