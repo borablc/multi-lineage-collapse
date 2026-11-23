@@ -13,7 +13,7 @@ SAMPLE_SEED = 3110
 GRID_SIZE = 64
 GRID_SEED = 541
 
-ARCH = "mlp"  # "mlp" or "conv", see lab.vae.ARCHITECTURES
+ARCH = "conv"  # "mlp" or "conv", see lab.vae.ARCHITECTURES
 
 
 def main():
