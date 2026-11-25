@@ -15,7 +15,7 @@ data/
 # IDE settings
 .idea/
 
-runs/
-scratch/
-checkpoints/
+/runs/
+/scratch/
+/checkpoints/
 *.pt

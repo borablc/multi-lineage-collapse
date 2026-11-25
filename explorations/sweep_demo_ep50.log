@@ -1,0 +1,78 @@
+seed: 0, n: 1, mr: 10, gen: 0, coverage: 0.4683, syn_frac: 0.0000, seconds: 75.60
+seed: 0, n: 1, mr: 10, gen: 1, coverage: 0.4343, syn_frac: 0.0912, seconds: 73.33
+seed: 0, n: 1, mr: 10, gen: 2, coverage: 0.4413, syn_frac: 0.1683, seconds: 73.38
+seed: 0, n: 1, mr: 10, gen: 3, coverage: 0.4287, syn_frac: 0.2308, seconds: 73.25
+seed: 0, n: 1, mr: 50, gen: 0, coverage: 0.4683, syn_frac: 0.0000, seconds: 75.60
+seed: 0, n: 1, mr: 50, gen: 1, coverage: 0.3757, syn_frac: 0.3342, seconds: 73.77
+seed: 0, n: 1, mr: 50, gen: 2, coverage: 0.3597, syn_frac: 0.5006, seconds: 73.58
+seed: 0, n: 1, mr: 50, gen: 3, coverage: 0.3207, syn_frac: 0.5995, seconds: 73.44
+seed: 0, n: 2, mr: 10, gen: 0, coverage: 0.5060, syn_frac: 0.0000, seconds: 145.41
+seed: 0, n: 2, mr: 10, gen: 1, coverage: 0.4523, syn_frac: 0.0906, seconds: 146.33
+seed: 0, n: 2, mr: 10, gen: 2, coverage: 0.4300, syn_frac: 0.1661, seconds: 145.50
+seed: 0, n: 2, mr: 10, gen: 3, coverage: 0.4150, syn_frac: 0.2302, seconds: 146.49
+seed: 0, n: 2, mr: 50, gen: 0, coverage: 0.5060, syn_frac: 0.0000, seconds: 145.41
+seed: 0, n: 2, mr: 50, gen: 1, coverage: 0.4080, syn_frac: 0.3335, seconds: 147.40
+seed: 0, n: 2, mr: 50, gen: 2, coverage: 0.3597, syn_frac: 0.4996, seconds: 147.68
+seed: 0, n: 2, mr: 50, gen: 3, coverage: 0.3340, syn_frac: 0.6005, seconds: 146.00
+seed: 1, n: 1, mr: 10, gen: 0, coverage: 0.4980, syn_frac: 0.0000, seconds: 73.87
+seed: 1, n: 1, mr: 10, gen: 1, coverage: 0.4527, syn_frac: 0.0911, seconds: 82.12
+seed: 1, n: 1, mr: 10, gen: 2, coverage: 0.4350, syn_frac: 0.1663, seconds: 76.19
+seed: 1, n: 1, mr: 10, gen: 3, coverage: 0.4327, syn_frac: 0.2306, seconds: 75.92
+seed: 1, n: 1, mr: 50, gen: 0, coverage: 0.4980, syn_frac: 0.0000, seconds: 73.87
+seed: 1, n: 1, mr: 50, gen: 1, coverage: 0.3750, syn_frac: 0.3319, seconds: 75.19
+seed: 1, n: 1, mr: 50, gen: 2, coverage: 0.3613, syn_frac: 0.4964, seconds: 75.01
+seed: 1, n: 1, mr: 50, gen: 3, coverage: 0.3410, syn_frac: 0.5960, seconds: 74.77
+seed: 1, n: 2, mr: 10, gen: 0, coverage: 0.4790, syn_frac: 0.0000, seconds: 149.35
+seed: 1, n: 2, mr: 10, gen: 1, coverage: 0.4463, syn_frac: 0.0905, seconds: 150.67
+seed: 1, n: 2, mr: 10, gen: 2, coverage: 0.4363, syn_frac: 0.1665, seconds: 150.61
+seed: 1, n: 2, mr: 10, gen: 3, coverage: 0.4300, syn_frac: 0.2313, seconds: 151.82
+seed: 1, n: 2, mr: 50, gen: 0, coverage: 0.4790, syn_frac: 0.0000, seconds: 149.35
+seed: 1, n: 2, mr: 50, gen: 1, coverage: 0.4027, syn_frac: 0.3326, seconds: 150.76
+seed: 1, n: 2, mr: 50, gen: 2, coverage: 0.3743, syn_frac: 0.5004, seconds: 148.63
+seed: 1, n: 2, mr: 50, gen: 3, coverage: 0.3473, syn_frac: 0.5998, seconds: 148.52
+seed: 2, n: 1, mr: 10, gen: 0, coverage: 0.4947, syn_frac: 0.0000, seconds: 73.98
+seed: 2, n: 1, mr: 10, gen: 1, coverage: 0.4537, syn_frac: 0.0904, seconds: 73.59
+seed: 2, n: 1, mr: 10, gen: 2, coverage: 0.4557, syn_frac: 0.1662, seconds: 73.68
+seed: 2, n: 1, mr: 10, gen: 3, coverage: 0.4247, syn_frac: 0.2319, seconds: 74.23
+seed: 2, n: 1, mr: 50, gen: 0, coverage: 0.4947, syn_frac: 0.0000, seconds: 73.98
+seed: 2, n: 1, mr: 50, gen: 1, coverage: 0.4213, syn_frac: 0.3310, seconds: 74.14
+seed: 2, n: 1, mr: 50, gen: 2, coverage: 0.3717, syn_frac: 0.4978, seconds: 73.99
+seed: 2, n: 1, mr: 50, gen: 3, coverage: 0.3410, syn_frac: 0.5999, seconds: 73.87
+seed: 2, n: 2, mr: 10, gen: 0, coverage: 0.5237, syn_frac: 0.0000, seconds: 145.59
+seed: 2, n: 2, mr: 10, gen: 1, coverage: 0.4877, syn_frac: 0.0908, seconds: 143.58
+seed: 2, n: 2, mr: 10, gen: 2, coverage: 0.4587, syn_frac: 0.1668, seconds: 139.36
+seed: 2, n: 2, mr: 10, gen: 3, coverage: 0.4367, syn_frac: 0.2304, seconds: 139.31
+seed: 2, n: 2, mr: 50, gen: 0, coverage: 0.5237, syn_frac: 0.0000, seconds: 145.59
+seed: 2, n: 2, mr: 50, gen: 1, coverage: 0.3997, syn_frac: 0.3332, seconds: 139.21
+seed: 2, n: 2, mr: 50, gen: 2, coverage: 0.3783, syn_frac: 0.4998, seconds: 138.38
+seed: 2, n: 2, mr: 50, gen: 3, coverage: 0.3370, syn_frac: 0.5999, seconds: 139.84
+Demo, 3 seeds, 50 epochs, mean ± std (sample std). Format only, not results.
+
+### Coverage at Gen0 (real A vs B: 0.9747, noise: 0.0137)
+
+| N \ M/R | 10% | 50% |
+|---|---|---|
+| 1 | 0.487 ± 0.016 | 0.487 ± 0.016 |
+| 2 | 0.503 ± 0.022 | 0.503 ± 0.022 |
+
+### Relative Coverage change, Gen0 -> Gen3 (%)
+
+| N \ M/R | 10% | 50% |
+|---|---|---|
+| 1 | -11.9 ± 3.0 | -31.4 ± 0.3 |
+| 2 | -14.9 ± 4.1 | -32.4 ± 4.3 |
+
+### Coverage at Gen3 (real A vs B: 0.9747, noise: 0.0137)
+
+| N \ M/R | 10% | 50% |
+|---|---|---|
+| 1 | 0.429 ± 0.004 | 0.334 ± 0.012 |
+| 2 | 0.427 ± 0.011 | 0.339 ± 0.007 |
+
+### Test NELBO change, Gen3 - Gen0 (nats)
+
+| N \ M/R | 10% | 50% |
+|---|---|---|
+| 1 | +0.3 ± 0.7 | +1.6 ± 0.5 |
+| 2 | +0.4 ± 0.6 | +1.2 ± 0.5 |
+
